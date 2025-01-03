@@ -1,0 +1,33 @@
+module Processor_tb;
+
+    reg clk;
+    reg reset;
+
+    // Instantiate the processor
+    Processor uut (
+        .clk(clk),
+        .reset(reset)
+    );
+
+    // Clock generation
+    initial begin
+        clk = 0;
+        forever #5 clk = ~clk;  // 10ns period
+    end
+
+    // Test sequence
+    initial begin
+        reset = 1; #10;
+        reset = 0; #10;
+        // Add more simulation control as needed
+
+        #100;  // Run simulation for some time
+        $stop;
+    end
+
+    // Monitor signals (if needed)
+    // initial begin
+    //     $monitor("Time=%0t, PC=%h", $time, uut.PC);
+    // end
+
+endmodule
