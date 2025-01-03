@@ -1,0 +1,105 @@
+module Processor (
+    input clk,
+    input reset
+);
+    // Define pipeline registers
+    reg [31:0] IF_ID_IR, IF_ID_NPC;
+    reg [31:0] ID_EX_IR, ID_EX_A, ID_EX_B, ID_EX_IMM;
+    reg [31:0] EX_MEM_IR, EX_MEM_ALU_OUT, EX_MEM_B;
+    reg [31:0] MEM_WB_IR, MEM_WB_ALU_OUT, MEM_WB_MEM_OUT;
+
+    // Instruction Memory
+    reg [31:0] IMEM [0:31];
+    initial begin
+        IMEM[0] = 32'h20010001; // ADDI $1, $0, 1
+        IMEM[1] = 32'h20220002; // ADDI $2, $1, 2
+        IMEM[2] = 32'h00000000; // NOOP
+        IMEM[3] = 32'h00221820; // ADD  $3, $1, $2
+    end
+
+    // Data Memory
+    reg [31:0] DMEM [0:31];
+
+    // Register File
+    reg [31:0] RF [0:31];
+    initial begin
+        RF[0] = 0;
+    end
+
+    // Control signals
+    reg [2:0] alu_ctrl;
+    reg mem_read, mem_write, reg_write;
+
+    // Fetch Stage
+    reg [31:0] PC;
+    wire [31:0] next_PC = PC + 4;
+
+    always @(posedge clk or posedge reset) begin
+        if (reset) begin
+            PC <= 0;
+        end else begin
+            PC <= next_PC;
+            IF_ID_IR <= IMEM[PC >> 2];
+            IF_ID_NPC <= next_PC;
+        end
+    end
+
+    // Decode Stage
+    always @(posedge clk or posedge reset) begin
+        if (reset) begin
+            ID_EX_IR <= 0;
+            ID_EX_A <= 0;
+            ID_EX_B <= 0;
+            ID_EX_IMM <= 0;
+        end else begin
+            ID_EX_IR <= IF_ID_IR;
+            ID_EX_A <= RF[IF_ID_IR[25:21]]; // rs
+            ID_EX_B <= RF[IF_ID_IR[20:16]]; // rt
+            ID_EX_IMM <= {{16{IF_ID_IR[15]}}, IF_ID_IR[15:0]}; // Sign-extended immediate
+        end
+    end
+
+    // Execute Stage
+    always @(posedge clk or posedge reset) begin
+        if (reset) begin
+            EX_MEM_IR <= 0;
+            EX_MEM_ALU_OUT <= 0;
+            EX_MEM_B <= 0;
+        end else begin
+            EX_MEM_IR <= ID_EX_IR;
+            case (ID_EX_IR[31:26])
+                6'b000000: begin // R-type
+                    case (ID_EX_IR[5:0])
+                        6'b100000: EX_MEM_ALU_OUT <= ID_EX_A + ID_EX_B; // ADD
+                        6'b100010: EX_MEM_ALU_OUT <= ID_EX_A - ID_EX_B; // SUB
+                    endcase
+                end
+                6'b001000: EX_MEM_ALU_OUT <= ID_EX_A + ID_EX_IMM; // ADDI
+            endcase
+            EX_MEM_B <= ID_EX_B;
+        end
+    end
+
+    // Memory Stage
+    always @(posedge clk or posedge reset) begin
+        if (reset) begin
+            MEM_WB_IR <= 0;
+            MEM_WB_ALU_OUT <= 0;
+            MEM_WB_MEM_OUT <= 0;
+        end else begin
+            MEM_WB_IR <= EX_MEM_IR;
+            MEM_WB_ALU_OUT <= EX_MEM_ALU_OUT;
+            if (mem_read) MEM_WB_MEM_OUT <= DMEM[EX_MEM_ALU_OUT >> 2];
+            if (mem_write) DMEM[EX_MEM_ALU_OUT >> 2] <= EX_MEM_B;
+        end
+    end
+
+    // Write Back Stage
+    always @(posedge clk or posedge reset) begin
+        if (reset) begin
+        end else begin
+            if (reg_write) RF[MEM_WB_IR[20:16]] <= MEM_WB_ALU_OUT;
+        end
+    end
+
+endmodule
